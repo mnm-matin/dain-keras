@@ -1,4 +1,5 @@
 import tensorflow as tf
+tf.keras.backend.set_floatx('float64') # for numerical stability
 from tensorflow.keras import layers
 
 class DAIN_Layer(layers.Layer):
