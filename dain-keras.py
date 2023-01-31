@@ -1,26 +1,26 @@
 import tensorflow as tf
-tf.keras.backend.set_floatx('float64') # for numerical stability
 from tensorflow.keras import layers
 
 class DAIN_Layer(layers.Layer):
-    def __init__(self, mode='full', mean_lr=0.00001, gate_lr=0.001, scale_lr=0.00001, input_dim=2, **kwargs):
+    def __init__(self, mode='full', input_dim=5, **kwargs):
         super(DAIN_Layer, self).__init__(**kwargs)
         
         self.mode = mode
-        self.mean_lr = mean_lr
-        self.gate_lr = gate_lr
-        self.scale_lr = scale_lr
+        # self.mean_lr = mean_lr #0.00001
+        # self.gate_lr = gate_lr #0.00001
+        # self.scale_lr = scale_lr #0.00001
         
-        self.mean_layer = layers.Dense(input_dim, bias_initializer='zeros', kernel_initializer='identity')
-        self.scaling_layer = layers.Dense(input_dim, bias_initializer='zeros', kernel_initializer='identity')
+        self.mean_layer = layers.Dense(input_dim, kernel_initializer='identity', use_bias=False)
+        self.scaling_layer = layers.Dense(input_dim, kernel_initializer='identity', use_bias=False)
         self.gating_layer = layers.Dense(input_dim, bias_initializer='zeros', kernel_initializer='glorot_uniform')
         
         self.eps = 1e-8
         
     def call(self, x):
-        # Expecting (n_samples, dim, n_feature_vectors)
-
+        # Expecting (batch_size, window_len, num_features)
+        x = tf.transpose(x, perm=[0, 2, 1])
         def adaptive_avg(x):
+            # Expecting (batch_size, num_features, window_len)
             avg = tf.reduce_mean(x, axis=2)
             adaptive_avg = self.mean_layer(avg)
             adaptive_avg = tf.expand_dims(adaptive_avg, axis=-1)
@@ -28,6 +28,7 @@ class DAIN_Layer(layers.Layer):
             return x
 
         def adaptive_std(x):
+            # Expecting (batch_size, num_features, window_len)
             std = tf.reduce_mean(x ** 2, axis=2)
             std = tf.sqrt(std + self.eps)
             adaptive_std = self.scaling_layer(std)
@@ -37,6 +38,7 @@ class DAIN_Layer(layers.Layer):
             return x
 
         def gating(x):
+            # Expecting (batch_size, num_features, window_len)
             avg = tf.reduce_mean(x, axis=2)
             avg = self.gating_layer(avg)
             gate = tf.sigmoid(avg)
@@ -67,4 +69,20 @@ class DAIN_Layer(layers.Layer):
         else:
             assert False
             
-        return x
+        return tf.transpose(x, perm=[0, 2, 1])
+
+
+if __name__ == '__main__':
+    # Test
+    import numpy as np
+    # Create an example input batch of size (32, 10, 5)
+    # The batch should have varying ranges of values for each batch
+    example_batch = np.random.random((32, 10, 5))
+    example_batch = example_batch * np.random.randint(1, 10, size=(32, 1, 1))
+    example_batch = example_batch.astype(np.float32)
+    
+    dain_layer = DAIN_Layer(5)
+    out_batch = dain_layer(example_batch)
+    print(out_batch.shape)
+
+    
